@@ -4,7 +4,7 @@ import random
 from dataloader import Gen_Data_loader, Dis_dataloader
 from generator import Generator
 from discriminator import Discriminator
-from rollout import ROLLOUT
+from rollout import ROLLOUT_OLD
 import os
 
 #########################################################################################
@@ -14,7 +14,7 @@ EMB_DIM = 16 # embedding dimension
 HIDDEN_DIM = 32 # hidden state dimension of lstm cell
 SEQ_LENGTH = 20 # sequence length
 START_TOKEN = 0
-PRE_EPOCH_NUM = 100 # supervise (maximum likelihood estimation) epochs
+PRE_EPOCH_NUM = 200 # supervise (maximum likelihood estimation) epochs
 SEED = 88
 BATCH_SIZE = 64
 
@@ -31,7 +31,7 @@ dis_batch_size = 64
 #########################################################################################
 #  Basic Training Parameters
 #########################################################################################
-TOTAL_BATCH = 200
+TOTAL_BATCH = 300
 positive_file = 'Data/midi2.dat'
 negative_file = 'Data/generator_sample.dat'
 eval_real_file = 'Data/midi2_eval.dat'
@@ -104,12 +104,12 @@ def main():
 
     gen_data_loader.create_batches(positive_file)
 
-    log = open('save/experiment-log.txt', 'w')
+
     #  pre-train generator
     print 'Start pre-training...'
-    log.write('pre-training...\n')
+
     early_stop_buffer = [10.]*5
-    for epoch in xrange(PRE_EPOCH_NUM):
+    for e_cnt, epoch in enumerate(xrange(PRE_EPOCH_NUM)):
         loss = pre_train_epoch(sess, generator, gen_data_loader)
 
         if epoch % 2 == 0:
@@ -117,8 +117,6 @@ def main():
             likelihood_data_loader.create_batches(eval_real_file)
             test_loss = target_loss(sess, generator, likelihood_data_loader)
             print 'pre-train epoch ', epoch, 'test_loss ', test_loss
-            buffer = 'epoch:\t'+ str(epoch) + '\tnll:\t' + str(test_loss) + '\n'
-            log.write(buffer)
             early_stop_buffer = early_stop_buffer[1:]
             early_stop_buffer.append(test_loss)
             if all(early_stop_buffer[0] < np.asarray(early_stop_buffer[1:])):
@@ -126,7 +124,7 @@ def main():
 
     print 'Start pre-training discriminator...'
     # Train 3 epoch on the generated data and do this for 50 times
-    for e in range(10):
+    for e in range(e_cnt):
         generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
         dis_data_loader.load_train_data(positive_file, negative_file)
         for _ in range(3):
@@ -140,23 +138,23 @@ def main():
                 }
                 _ = sess.run(discriminator.train_op, feed)
         print 'Epoch {}'.format(e)
-    rollout = ROLLOUT(generator, 0.7)
+    rollout = ROLLOUT_OLD(generator, 0.7)
 
     print '#########################################################################'
     print 'Start Adversarial Training...'
     model_idx = 1
     fname = 'model' + str(model_idx)
-    model_save_path = '/home/yhsu/Desktop/SeqGAN/Model/' + fname + '/'
+    model_save_path = './Model/' + fname + '/'
 
     while os.path.exists(model_save_path):
         model_idx += 1
         fname = 'model' + str(model_idx)
-        model_save_path = '/home/yhsu/Desktop/SeqGAN/Model/' + fname + '/'
+        model_save_path = './Model/' + fname + '/'
 
     os.makedirs(model_save_path)
     os.makedirs(os.path.join('./log', fname))
 
-    log.write('adversarial training...\n')
+
     early_stop_buffer = [10.] * 4
     for total_batch in range(TOTAL_BATCH):
         # Train the generator for one step
@@ -173,7 +171,6 @@ def main():
             test_loss = target_loss(sess, generator, likelihood_data_loader)
             buffer = 'epoch:\t' + str(total_batch) + '\tnll:\t' + str(test_loss) + '\n'
             print 'total_batch: ', total_batch, 'test_loss: ', test_loss
-            log.write(buffer)
 
             early_stop_buffer = early_stop_buffer[1:]
             early_stop_buffer.append(test_loss)
@@ -206,7 +203,6 @@ def main():
         if not os.path.exists(metagraph_filename):
             saver.export_meta_graph(metagraph_filename)
 
-    log.close()
 
 
 if __name__ == '__main__':

@@ -79,51 +79,53 @@ def create_output_unit(graph):
 
 def main():
     batch_size =1
-    hidden_dim =32
+    hidden_dim =64
     num_emb =97
-    fname = 'model4'
+    fname = 'model3'
     model_path = './Model/'+fname+'/'
     meta_path = model_path +fname+'.meta'
-    ckpt_path = model_path +fname+'-10'
+    ckpt_path = model_path +fname+'-299'
     g = tf.Graph()
     with g.as_default():
         saver = tf.train.import_meta_graph(meta_path)
 
-        # l_var2 = get_all_variables_from_top_scope('generator')
+        l_var2 = get_all_variables_from_top_scope('generator')
 
-        g_embeddings = g.get_tensor_by_name('generator/Variable:0')
-        g_recurrent_unit = create_recurrent_unit(g)  # maps h_tm1 to h_t for generator
-        g_output_unit = create_output_unit(g)  # maps h_t to o_t (output token logits)
-
-        h0 = tf.zeros([batch_size, hidden_dim])
-        h0 = tf.stack([h0, h0])
-
-        # gen_o = tensor_array_ops.TensorArray(dtype=tf.float32,dynamic_size=True, infer_shape=True)
-        gen_x = tensor_array_ops.TensorArray(dtype=tf.int32, size=32, dynamic_size=True, infer_shape=True)
-
-        def _g_recurrence(i, q, x_t, h_tm1,  gen_x):
-            h_t = g_recurrent_unit(x_t, h_tm1)  # hidden_memory_tuple
-            h_t = tf.Print(h_t,[q])
-            o_t = g_output_unit(h_t)  # batch x vocab , logits not prob
-            log_prob = tf.log(tf.nn.softmax(o_t))
-            next_token = tf.cast(tf.reshape(tf.multinomial(log_prob, 1), [batch_size]), tf.int32)
-            x_tp1 = tf.nn.embedding_lookup(g_embeddings, next_token)  # batch x emb_dim
-            gen_x = gen_x.write(i, next_token)  # indices, batch_size
-            return i+1, next_token[0], x_tp1, h_t,  gen_x
-
-        _, _, _, _, gen_x = control_flow_ops.while_loop(
-            cond=lambda i, q,_1, _2, _3: q<tf.constant(96),
-            body=_g_recurrence,
-            loop_vars=(tf.constant(0, dtype=tf.int32), tf.constant(0, dtype=tf.int32),
-                       tf.nn.embedding_lookup(g_embeddings, tf.constant([0] * batch_size, dtype=tf.int32)), h0,  gen_x))
-
-        gen_x = gen_x.stack()
-        gen_x = tf.transpose(gen_x, perm=[1, 0])  # batch_size x seq_length
-        with tf.Session() as sess:
-            saver.restore(sess,ckpt_path)
-            outputs = sess.run(gen_x)
-
-        print outputs
+        for x in l_var2:
+            print x
+        # g_embeddings = g.get_tensor_by_name('generator/Variable:0')
+        # g_recurrent_unit = create_recurrent_unit(g)  # maps h_tm1 to h_t for generator
+        # g_output_unit = create_output_unit(g)  # maps h_t to o_t (output token logits)
+        #
+        # h0 = tf.zeros([batch_size, hidden_dim])
+        # h0 = tf.stack([h0, h0])
+        #
+        # # gen_o = tensor_array_ops.TensorArray(dtype=tf.float32,dynamic_size=True, infer_shape=True)
+        # gen_x = tensor_array_ops.TensorArray(dtype=tf.int32, size=32, dynamic_size=True, infer_shape=True)
+        #
+        # def _g_recurrence(i, q, x_t, h_tm1,  gen_x):
+        #     h_t = g_recurrent_unit(x_t, h_tm1)  # hidden_memory_tuple
+        #     h_t = tf.Print(h_t,[q])
+        #     o_t = g_output_unit(h_t)  # batch x vocab , logits not prob
+        #     log_prob = tf.log(tf.nn.softmax(o_t))
+        #     next_token = tf.cast(tf.reshape(tf.multinomial(log_prob, 1), [batch_size]), tf.int32)
+        #     x_tp1 = tf.nn.embedding_lookup(g_embeddings, next_token)  # batch x emb_dim
+        #     gen_x = gen_x.write(i, next_token)  # indices, batch_size
+        #     return i+1, next_token[0], x_tp1, h_t,  gen_x
+        #
+        # _, _, _, _, gen_x = control_flow_ops.while_loop(
+        #     cond=lambda i, q,_1, _2, _3: q<tf.constant(96),
+        #     body=_g_recurrence,
+        #     loop_vars=(tf.constant(0, dtype=tf.int32), tf.constant(0, dtype=tf.int32),
+        #                tf.nn.embedding_lookup(g_embeddings, tf.constant([0] * batch_size, dtype=tf.int32)), h0,  gen_x))
+        #
+        # gen_x = gen_x.stack()
+        # gen_x = tf.transpose(gen_x, perm=[1, 0])  # batch_size x seq_length
+        # with tf.Session() as sess:
+        #     saver.restore(sess,ckpt_path)
+        #     outputs = sess.run(gen_x)
+        #
+        # print outputs
 
 
 if __name__ == '__main__':

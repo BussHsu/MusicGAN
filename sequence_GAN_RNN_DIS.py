@@ -11,7 +11,7 @@ import os
 #  Generator  Hyper-parameters
 ######################################################################################
 EMB_DIM = 16 # embedding dimension
-HIDDEN_DIM = 32 # hidden state dimension of lstm cell
+HIDDEN_DIM = 64 # hidden state dimension of lstm cell
 SEQ_LENGTH = 20 # sequence length
 START_TOKEN = 0
 PRE_EPOCH_NUM = 200 # supervise (maximum likelihood estimation) epochs
@@ -92,22 +92,39 @@ def main():
 
 
     discriminator = RNNDiscriminator(sequence_length=20, nrof_class=2, vocab_size=vocab_size, emb_dim=dis_embedding_dim,
-                                     batch_size = dis_batch_size,hidden_dim = HIDDEN_DIM, learning_rate = 0.01)
+                                     batch_size = dis_batch_size,hidden_dim = 2*HIDDEN_DIM, learning_rate = 0.03)
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     sess = tf.Session(config=config)
     sess.run(tf.global_variables_initializer())
+
+    # Create Saver
     saver = tf.train.Saver(max_to_keep=10)
+
+    model_idx = 1
+    fname = 'model' + str(model_idx)
+    model_save_path = './Model/' + fname + '/'
+
+    while os.path.exists(model_save_path):
+        model_idx += 1
+        fname = 'model' + str(model_idx)
+        model_save_path = './Model/' + fname + '/'
+
+    pre_model_save_path = './Model/' + fname + '_pre/'
+
+    os.makedirs(model_save_path)
+    os.makedirs(pre_model_save_path)
+    # os.makedirs(os.path.join('./log', fname))
+
+    pretrain_fname = fname+'_pre_tr'
 
     # First, use the oracle model to provide the positive examples, which are sampled from the oracle data distribution
 
     gen_data_loader.create_batches(positive_file)
 
-    log = open('save/experiment-log.txt', 'w')
     #  pre-train generator
     print 'Start pre-training...'
-    log.write('pre-training...\n')
     early_stop_buffer = [10.]*5
     for pretrain_cnt, epoch in enumerate(xrange(PRE_EPOCH_NUM)):
         loss = pre_train_epoch(sess, generator, gen_data_loader)
@@ -117,12 +134,18 @@ def main():
             likelihood_data_loader.create_batches(eval_real_file)
             test_loss = target_loss(sess, generator, likelihood_data_loader)
             print 'pre-train epoch ', epoch, 'test_loss ', test_loss
-            buffer = 'epoch:\t'+ str(epoch) + '\tnll:\t' + str(test_loss) + '\n'
-            log.write(buffer)
             early_stop_buffer = early_stop_buffer[1:]
             early_stop_buffer.append(test_loss)
             if all(early_stop_buffer[0] < np.asarray(early_stop_buffer[1:])):
                 break
+
+            elif all(early_stop_buffer[-1] < np.asarray(early_stop_buffer[:-1])):   # save on local min
+                saver.save(sess, os.path.join(pre_model_save_path, pretrain_fname), global_step=epoch, write_meta_graph=False)
+
+                metagraph_filename = os.path.join(pre_model_save_path, pretrain_fname + '.meta')
+
+                if not os.path.exists(metagraph_filename):
+                    saver.export_meta_graph(metagraph_filename)
 
     print 'Start pre-training discriminator...'
     # Train 3 epoch on the generated data and do this for 50 times
@@ -144,20 +167,9 @@ def main():
 
     print '#########################################################################'
     print 'Start Adversarial Training...'
-    model_idx = 1
-    fname = 'model' + str(model_idx)
-    model_save_path = '/home/yhsu/Desktop/SeqGAN/Model/' + fname + '/'
 
-    while os.path.exists(model_save_path):
-        model_idx += 1
-        fname = 'model' + str(model_idx)
-        model_save_path = '/home/yhsu/Desktop/SeqGAN/Model/' + fname + '/'
 
-    os.makedirs(model_save_path)
-    os.makedirs(os.path.join('./log', fname))
-
-    log.write('adversarial training...\n')
-    early_stop_buffer = [10.] * 4
+    early_stop_buffer = [10.] * 6
     for total_batch in range(TOTAL_BATCH):
         # Train the generator for one step
         for it in range(1):
@@ -167,18 +179,24 @@ def main():
             _ = sess.run(generator.g_updates, feed_dict=feed)
 
         # Test
-        if total_batch % 3 == 0 or total_batch == TOTAL_BATCH - 1:
+        if total_batch % 2 == 0 or total_batch == TOTAL_BATCH - 1:
             # generate_samples(sess, generator, BATCH_SIZE, generated_num, eval_file)
             likelihood_data_loader.create_batches(eval_real_file)
             test_loss = target_loss(sess, generator, likelihood_data_loader)
-            buffer = 'epoch:\t' + str(total_batch) + '\tnll:\t' + str(test_loss) + '\n'
             print 'total_batch: ', total_batch, 'test_loss: ', test_loss
-            log.write(buffer)
 
-            early_stop_buffer = early_stop_buffer[1:]
-            early_stop_buffer.append(test_loss)
-            if all(early_stop_buffer[0] < np.asarray(early_stop_buffer[1:])):
-                break
+            # early_stop_buffer = early_stop_buffer[1:]
+            # early_stop_buffer.append(test_loss)
+            # if all(early_stop_buffer[0] < np.asarray(early_stop_buffer[1:])):
+            #     break
+
+            # elif all(early_stop_buffer[-1] < np.asarray(early_stop_buffer[:-1])):   # save on local min
+            saver.save(sess, os.path.join(model_save_path, fname), global_step=total_batch, write_meta_graph=False)
+
+            metagraph_filename = os.path.join(model_save_path, fname + '.meta')
+
+            if not os.path.exists(metagraph_filename):
+                saver.export_meta_graph(metagraph_filename)
 
         # Update roll-out parameters
         rollout.update_params()
@@ -199,14 +217,8 @@ def main():
                     }
                     _ = sess.run(discriminator.train_op, feed)
 
-        saver.save(sess, os.path.join(model_save_path, fname), global_step=total_batch, write_meta_graph=False)
 
-        metagraph_filename = os.path.join(model_save_path, fname + '.meta')
 
-        if not os.path.exists(metagraph_filename):
-            saver.export_meta_graph(metagraph_filename)
-
-    log.close()
 
 
 if __name__ == '__main__':
