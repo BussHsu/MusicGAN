@@ -1,6 +1,7 @@
 # Find the layers
 import tensorflow as tf
 from tensorflow.python.ops import tensor_array_ops, control_flow_ops
+import os
 
 def get_all_variables_from_top_scope(scope):
     # scope is a top scope here, otherwise change startswith part
@@ -79,12 +80,28 @@ def create_output_unit(graph):
 
 def main():
     batch_size =1
-    hidden_dim =32
-    num_emb =97
-    fname = 'model4'
+    hidden_dim =64
+    eof_symbol =96
+    fname = 'model3_pre'
     model_path = './Model/'+fname+'/'
     meta_path = model_path +fname+'.meta'
-    ckpt_path = model_path +fname+'-10'
+    ckpt_path = model_path +fname+'-16'
+    dictionary_file = './Data/dict/TrainableMidi2-Table.txt'
+    tgt_prefix = './Data/result/'+fname+'_'
+    f_idx =1
+    tgt_fpath = tgt_prefix+str(f_idx)+'.txt'
+    while os.path.exists(tgt_fpath):
+        f_idx += 1
+        tgt_fpath = tgt_prefix+str(f_idx)+'.txt'
+
+    with open(dictionary_file, 'r') as f:
+        buf = f.read()
+
+    forward_dict = eval(buf)
+    backward_dict = {}
+    for x,y in forward_dict.items():
+        backward_dict[y] = x
+
     g = tf.Graph()
     with g.as_default():
         saver = tf.train.import_meta_graph(meta_path)
@@ -123,7 +140,12 @@ def main():
             saver.restore(sess,ckpt_path)
             outputs = sess.run(gen_x)
 
-        print outputs
+        outputs = outputs[0,:]
+        with open(tgt_fpath, 'w') as f:
+            for tok in outputs:
+                if tok == eof_symbol:
+                    break
+                f.write(backward_dict[int(tok)])
 
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-generator: 2 layer, hidden = 64
-discriminator: rnn 1 layer, hidden = 128
+generator: 1 layer, hidden = 64
+discriminator: rnn 1 layer
 pre epoch 21
 adv batch 300

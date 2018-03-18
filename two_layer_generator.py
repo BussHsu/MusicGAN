@@ -49,7 +49,8 @@ class Generator2(object):
 
         def _g_recurrence(i, x_t, h_tm1, h_tm2, gen_o, gen_x):
             h_t1 = self.g_recurrent_unit(x_t, h_tm1)  # hidden_memory_tuple
-            h_t2 = self.g_recurrent_unit2(h_t1, h_tm2)
+            h_t1_hid, _ = tf.unstack(h_t1)
+            h_t2 = self.g_recurrent_unit2(h_t1_hid, h_tm2)
             o_t = self.g_output_unit(h_t2)  # batch x vocab , logits not prob
             log_prob = tf.log(tf.nn.softmax(o_t))
             next_token = tf.cast(tf.reshape(tf.multinomial(log_prob, 1), [self.batch_size]), tf.int32)
@@ -83,7 +84,8 @@ class Generator2(object):
 
         def _pretrain_recurrence(i, x_t, h_tm1, h_tm2, g_predictions):
             h_t1 = self.g_recurrent_unit(x_t, h_tm1)
-            h_t2 = self.g_recurrent_unit2(h_t1, h_tm2)
+            h_t1_hid, _ = tf.unstack(h_t1)
+            h_t2 = self.g_recurrent_unit2(h_t1_hid, h_tm2)
             o_t = self.g_output_unit(h_t2)
             g_predictions = g_predictions.write(i, tf.nn.softmax(o_t))  # batch x vocab_size
             x_tp1 = ta_emb_x.read(i)

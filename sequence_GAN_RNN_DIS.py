@@ -2,7 +2,8 @@ import numpy as np
 import tensorflow as tf
 import random
 from dataloader import Gen_Data_loader, Dis_dataloader
-from generator import Generator
+# from generator import Generator
+from two_layer_generator import Generator2
 from rnn_discriminator import RNNDiscriminator
 from rollout import ROLLOUT
 import os
@@ -14,7 +15,7 @@ EMB_DIM = 16 # embedding dimension
 HIDDEN_DIM = 64 # hidden state dimension of lstm cell
 SEQ_LENGTH = 20 # sequence length
 START_TOKEN = 0
-PRE_EPOCH_NUM = 200 # supervise (maximum likelihood estimation) epochs
+PRE_EPOCH_NUM = 1 # supervise (maximum likelihood estimation) epochs
 SEED = 88
 BATCH_SIZE = 64
 
@@ -31,7 +32,7 @@ dis_batch_size = 64
 #########################################################################################
 #  Basic Training Parameters
 #########################################################################################
-TOTAL_BATCH = 300
+TOTAL_BATCH = 1
 positive_file = 'Data/midi2.dat'
 negative_file = 'Data/generator_sample.dat'
 eval_real_file = 'Data/midi2_eval.dat'
@@ -88,7 +89,7 @@ def main():
     vocab_size = 97
     dis_data_loader = Dis_dataloader(BATCH_SIZE)
 
-    generator = Generator(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN,learning_rate=0.01)
+    generator = Generator2(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN,learning_rate=0.01)
 
 
     discriminator = RNNDiscriminator(sequence_length=20, nrof_class=2, vocab_size=vocab_size, emb_dim=dis_embedding_dim,
@@ -100,6 +101,7 @@ def main():
     sess.run(tf.global_variables_initializer())
 
     # Create Saver
+    saver_pretrain = tf.train.Saver(max_to_keep=10)
     saver = tf.train.Saver(max_to_keep=10)
 
     model_idx = 1
@@ -117,7 +119,7 @@ def main():
     os.makedirs(pre_model_save_path)
     # os.makedirs(os.path.join('./log', fname))
 
-    pretrain_fname = fname+'_pre_tr'
+    pretrain_fname = fname+'_pre'
 
     # First, use the oracle model to provide the positive examples, which are sampled from the oracle data distribution
 
@@ -140,7 +142,7 @@ def main():
                 break
 
             elif all(early_stop_buffer[-1] < np.asarray(early_stop_buffer[:-1])):   # save on local min
-                saver.save(sess, os.path.join(pre_model_save_path, pretrain_fname), global_step=epoch, write_meta_graph=False)
+                saver_pretrain.save(sess, os.path.join(pre_model_save_path, pretrain_fname), global_step=epoch, write_meta_graph=False)
 
                 metagraph_filename = os.path.join(pre_model_save_path, pretrain_fname + '.meta')
 
@@ -171,6 +173,7 @@ def main():
 
     early_stop_buffer = [10.] * 6
     for total_batch in range(TOTAL_BATCH):
+
         # Train the generator for one step
         for it in range(1):
             samples = generator.generate(sess)
