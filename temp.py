@@ -80,12 +80,12 @@ def create_output_unit(graph):
 
 def main():
     batch_size =1
-    hidden_dim =64
+    hidden_dim =32
     eof_symbol =96
-    fname = 'model3_pre'
+    fname = 'model2'
     model_path = './Model/'+fname+'/'
     meta_path = model_path +fname+'.meta'
-    ckpt_path = model_path +fname+'-16'
+    ckpt_path = model_path +fname+'-50'
     dictionary_file = './Data/dict/TrainableMidi2-Table.txt'
     tgt_prefix = './Data/result/'+fname+'_'
     f_idx =1

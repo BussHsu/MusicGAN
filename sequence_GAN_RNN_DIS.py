@@ -15,7 +15,7 @@ EMB_DIM = 16 # embedding dimension
 HIDDEN_DIM = 64 # hidden state dimension of lstm cell
 SEQ_LENGTH = 20 # sequence length
 START_TOKEN = 0
-PRE_EPOCH_NUM = 1 # supervise (maximum likelihood estimation) epochs
+PRE_EPOCH_NUM = 200 # supervise (maximum likelihood estimation) epochs
 SEED = 88
 BATCH_SIZE = 64
 
@@ -32,7 +32,7 @@ dis_batch_size = 64
 #########################################################################################
 #  Basic Training Parameters
 #########################################################################################
-TOTAL_BATCH = 1
+TOTAL_BATCH = 300
 positive_file = 'Data/midi2.dat'
 negative_file = 'Data/generator_sample.dat'
 eval_real_file = 'Data/midi2_eval.dat'
@@ -150,20 +150,20 @@ def main():
                     saver.export_meta_graph(metagraph_filename)
 
     print 'Start pre-training discriminator...'
-    # Train 3 epoch on the generated data and do this for 50 times
+    # Train 1 epoch on the generated data and do this for 50 times
     for e in range(pretrain_cnt):
         generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
         dis_data_loader.load_train_data(positive_file, negative_file)
-        for _ in range(3):
-            dis_data_loader.reset_pointer()
-            for it in xrange(dis_data_loader.num_batch):
-                x_batch, y_batch = dis_data_loader.next_batch()
-                feed = {
-                    discriminator.input_x: x_batch,
-                    discriminator.input_y: y_batch,
+
+        dis_data_loader.reset_pointer()
+        for it in xrange(dis_data_loader.num_batch):
+            x_batch, y_batch = dis_data_loader.next_batch()
+            feed = {
+                discriminator.input_x: x_batch,
+                discriminator.input_y: y_batch,
                     # discriminator.dropout_keep_prob: dis_dropout_keep_prob
                 }
-                _ = sess.run(discriminator.train_op, feed)
+            _ = sess.run(discriminator.train_op, feed)
         print 'Epoch {}'.format(e)
     rollout = ROLLOUT(generator, 0.7)
 
@@ -209,16 +209,12 @@ def main():
             generate_samples(sess, generator, BATCH_SIZE, generated_num, eval_file)
             dis_data_loader.load_train_data(positive_file, negative_file)
 
-            for _ in range(3):
-                dis_data_loader.reset_pointer()
-                for it in xrange(dis_data_loader.num_batch):
-                    x_batch, y_batch = dis_data_loader.next_batch()
-                    feed = {
-                        discriminator.input_x: x_batch,
-                        discriminator.input_y: y_batch,
-                        # discriminator.dropout_keep_prob: dis_dropout_keep_prob
-                    }
-                    _ = sess.run(discriminator.train_op, feed)
+
+            dis_data_loader.reset_pointer()
+            for it in xrange(dis_data_loader.num_batch):
+                x_batch, y_batch = dis_data_loader.next_batch()
+                feed = {discriminator.input_x: x_batch,discriminator.input_y: y_batch }
+                _ = sess.run(discriminator.train_op, feed)
 
 
 
