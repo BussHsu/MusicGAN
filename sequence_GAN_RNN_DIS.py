@@ -1,43 +1,13 @@
 import numpy as np
 import tensorflow as tf
-import random
+# import random
 from dataloader import Gen_Data_loader, Dis_dataloader
 # from generator import Generator
 from two_layer_generator import Generator2
-from rnn_discriminator import RNNDiscriminator
+from rnn_discriminator import RNNDiscriminator2
 from rollout import ROLLOUT
 import os
-
-#########################################################################################
-#  Generator  Hyper-parameters
-######################################################################################
-EMB_DIM = 16 # embedding dimension
-HIDDEN_DIM = 64 # hidden state dimension of lstm cell
-SEQ_LENGTH = 20 # sequence length
-START_TOKEN = 0
-PRE_EPOCH_NUM = 200 # supervise (maximum likelihood estimation) epochs
-SEED = 88
-BATCH_SIZE = 64
-
-#########################################################################################
-#  Discriminator  Hyper-parameters
-#########################################################################################
-dis_embedding_dim = EMB_DIM
-dis_filter_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
-dis_num_filters = [100, 200, 200, 200, 200, 100, 100, 100, 100, 100, 160, 160]
-dis_dropout_keep_prob = 0.75
-dis_l2_reg_lambda = 0.2
-dis_batch_size = 64
-
-#########################################################################################
-#  Basic Training Parameters
-#########################################################################################
-TOTAL_BATCH = 300
-positive_file = 'Data/midi2.dat'
-negative_file = 'Data/generator_sample.dat'
-eval_real_file = 'Data/midi2_eval.dat'
-eval_file = 'Data/eval.dat'
-generated_num = 20000
+from config import *
 
 
 def generate_samples(sess, trainable_model, batch_size, generated_num, output_file):
@@ -80,19 +50,19 @@ def pre_train_epoch(sess, trainable_model, data_loader):
 
 
 def main():
-    random.seed(SEED)
-    np.random.seed(SEED)
+    # random.seed(SEED)
+    # np.random.seed(SEED)
     assert START_TOKEN == 0
 
     gen_data_loader = Gen_Data_loader(BATCH_SIZE)
     likelihood_data_loader = Gen_Data_loader(BATCH_SIZE) # For testing
-    vocab_size = 97
+
     dis_data_loader = Dis_dataloader(BATCH_SIZE)
 
-    generator = Generator2(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN,learning_rate=0.01)
+    generator = Generator2(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN,learning_rate=0.03)
 
 
-    discriminator = RNNDiscriminator(sequence_length=20, nrof_class=2, vocab_size=vocab_size, emb_dim=dis_embedding_dim,
+    discriminator = RNNDiscriminator2(sequence_length=SEQ_LENGTH, nrof_class=2, vocab_size=vocab_size, emb_dim=dis_embedding_dim,
                                      batch_size = dis_batch_size,hidden_dim = 2*HIDDEN_DIM, learning_rate = 0.03)
 
     config = tf.ConfigProto()
@@ -149,22 +119,24 @@ def main():
                 if not os.path.exists(metagraph_filename):
                     saver.export_meta_graph(metagraph_filename)
 
+    saver.restore(sess,tf.train.latest_checkpoint(pre_model_save_path))
+
+
     print 'Start pre-training discriminator...'
     # Train 1 epoch on the generated data and do this for 50 times
-    for e in range(pretrain_cnt):
+    for e in range(50):
         generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
         dis_data_loader.load_train_data(positive_file, negative_file)
-
-        dis_data_loader.reset_pointer()
-        for it in xrange(dis_data_loader.num_batch):
-            x_batch, y_batch = dis_data_loader.next_batch()
-            feed = {
-                discriminator.input_x: x_batch,
-                discriminator.input_y: y_batch,
-                    # discriminator.dropout_keep_prob: dis_dropout_keep_prob
-                }
-            _ = sess.run(discriminator.train_op, feed)
-        print 'Epoch {}'.format(e)
+        for _ in range(3):
+            dis_data_loader.reset_pointer()
+            for it in xrange(dis_data_loader.num_batch):
+                x_batch, y_batch = dis_data_loader.next_batch()
+                feed = {
+                    discriminator.input_x: x_batch,
+                    discriminator.input_y: y_batch
+                    }
+                _ = sess.run(discriminator.train_op, feed)
+            print 'Epoch {}'.format(e)
     rollout = ROLLOUT(generator, 0.7)
 
     print '#########################################################################'
@@ -177,7 +149,7 @@ def main():
         # Train the generator for one step
         for it in range(1):
             samples = generator.generate(sess)
-            rewards = rollout.get_reward(sess, samples, 16, discriminator)
+            rewards = rollout.get_reward(sess, samples, SAMP_NUM, discriminator)
             feed = {generator.x: samples, generator.rewards: rewards}
             _ = sess.run(generator.g_updates, feed_dict=feed)
 
@@ -205,15 +177,15 @@ def main():
         rollout.update_params()
 
         # Train the discriminator
-        for _ in range(1):
-            generate_samples(sess, generator, BATCH_SIZE, generated_num, eval_file)
+        for _ in range(3):
+            generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
             dis_data_loader.load_train_data(positive_file, negative_file)
 
 
             dis_data_loader.reset_pointer()
             for it in xrange(dis_data_loader.num_batch):
                 x_batch, y_batch = dis_data_loader.next_batch()
-                feed = {discriminator.input_x: x_batch,discriminator.input_y: y_batch }
+                feed = {discriminator.input_x: x_batch, discriminator.input_y: y_batch }
                 _ = sess.run(discriminator.train_op, feed)
 
 

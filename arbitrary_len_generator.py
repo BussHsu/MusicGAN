@@ -2,9 +2,9 @@ import tensorflow as tf
 from tensorflow.python.ops import tensor_array_ops, control_flow_ops
 
 
-class Generator(object):
+class ArbGenerator(object):
     def __init__(self, num_emb, batch_size, emb_dim, hidden_dim,
-                 sequence_length, start_token,
+                 sequence_length, start_token, end_token,
                  learning_rate=0.01, reward_gamma=0.95):
         self.num_emb = num_emb  #97
         self.batch_size = batch_size #64

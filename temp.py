@@ -2,6 +2,7 @@
 import tensorflow as tf
 from tensorflow.python.ops import tensor_array_ops, control_flow_ops
 import os
+from config import HIDDEN_DIM
 
 def get_all_variables_from_top_scope(scope):
     # scope is a top scope here, otherwise change startswith part
@@ -80,12 +81,12 @@ def create_output_unit(graph):
 
 def main():
     batch_size =1
-    hidden_dim =32
+    hidden_dim =HIDDEN_DIM
     eof_symbol =96
-    fname = 'model2'
+    fname = 'model12'
     model_path = './Model/'+fname+'/'
     meta_path = model_path +fname+'.meta'
-    ckpt_path = model_path +fname+'-50'
+    ckpt_path = model_path +fname+'-5'
     dictionary_file = './Data/dict/TrainableMidi2-Table.txt'
     tgt_prefix = './Data/result/'+fname+'_'
     f_idx =1

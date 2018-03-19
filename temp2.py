@@ -136,11 +136,11 @@ def main():
     batch_size = 1
     hidden_dim = 64
     eof_symbol = 96
-    fname = 'model5_pre'
+    fname = 'model13'
     model_path = './Model/' + fname + '/'
     meta_path = model_path + fname + '.meta'
-    ckpt_path = model_path + fname + '-22'
-    dictionary_file = './Data/dict/TrainableMidi2-Table.txt'
+    ckpt_path = model_path + fname + '-6'
+    dictionary_file = './Data/dict/ReelJigTable.txt'
     tgt_prefix = './Data/result/' + fname + '_'
     f_idx = 1
     tgt_fpath = tgt_prefix + str(f_idx) + '.txt'
