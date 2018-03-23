@@ -2,11 +2,11 @@ import tensorflow as tf
 from tensorflow.python.ops import tensor_array_ops, control_flow_ops
 
 
-class Generator(object):
+class ArbGenerator(object):
     def __init__(self, num_emb, batch_size, emb_dim, hidden_dim,
-                 sequence_length, start_token,
+                 sequence_length, start_token, end_token,
                  learning_rate=0.01, reward_gamma=0.95):
-        self.num_emb = num_emb  #5000
+        self.num_emb = num_emb  #97
         self.batch_size = batch_size #64
         self.emb_dim = emb_dim  #32
         self.hidden_dim = hidden_dim
@@ -59,8 +59,7 @@ class Generator(object):
             cond=lambda i, _1, _2, _3, _4: i < self.sequence_length,
             body=_g_recurrence,
             loop_vars=(tf.constant(0, dtype=tf.int32),
-                       tf.nn.embedding_lookup(self.g_embeddings,
-                                              self.start_token),
+                       tf.nn.embedding_lookup(self.g_embeddings, self.start_token),
                        self.h0,
                        gen_o,
                        gen_x))
@@ -192,7 +191,7 @@ class Generator(object):
             # Current Hidden state
             current_hidden_state = o * tf.nn.tanh(c)
 
-            return tf.stack([current_hidden_state, c], name='hidden_state')
+            return tf.stack([current_hidden_state, c])
 
         return unit
 
@@ -206,7 +205,7 @@ class Generator(object):
             # hidden_state : batch x hidden_dim
             logits = tf.matmul(hidden_state, self.Wo) + self.bo
             # output = tf.nn.softmax(logits)
-            logits = tf.identity(logits, name='output_logits')
+            logits = tf.identity(logits, 'output_logits')
             return logits
 
         return unit

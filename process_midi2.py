@@ -1,8 +1,8 @@
 import numpy as np
 
 DEFAULT_EOF_SYM = 100
-SEGMENT_LEN = 20
-SEGMENT_SHIFT = 8
+SEGMENT_LEN = 30
+SEGMENT_SHIFT = 20
 
 # cut music into segments
 def segment_music(music, eof_sym, seg_len = SEGMENT_LEN, seg_shift = SEGMENT_SHIFT):
@@ -19,7 +19,7 @@ def segment_music(music, eof_sym, seg_len = SEGMENT_LEN, seg_shift = SEGMENT_SHI
     if left_over!=0:
         num_pad = seg_shift-left_over
         tmp = np.hstack((music[seg_shift*(cnt+1):],eof_sym*np.ones((num_pad),dtype=np.uint8)))
-        assert len(tmp)==20
+        assert len(tmp)==SEGMENT_LEN
         seg_list.append(tmp)
 
     return seg_list
@@ -27,7 +27,9 @@ def segment_music(music, eof_sym, seg_len = SEGMENT_LEN, seg_shift = SEGMENT_SHI
 
 
 # determine data range
-data_arry = np.genfromtxt('./Data/raw/TrainableMidi2.txt',delimiter=' ')
+tr_output_fpath = './Data/all_reel.dat'
+te_output_fpath = './Data/all_reel_eval.dat'
+data_arry = np.genfromtxt('./Data/raw/AllReel.txt',delimiter=' ')
 eof_sym = 96
 data_arry[np.where(data_arry == DEFAULT_EOF_SYM)] = eof_sym
 
@@ -56,4 +58,13 @@ data_mat = np.empty((len(seg_list), SEGMENT_LEN),dtype=np.uint8)
 for idx, segment in enumerate(seg_list):
     data_mat[idx,:] = segment
 
-np.savetxt('./Data/midi2.dat', data_mat, delimiter=' ', fmt='%d')
+
+total_num = len(seg_list)
+tr_num = int(0.8*total_num)
+
+np.random.shuffle(data_mat)
+tr_mat = data_mat[:tr_num,:]
+te_mat = data_mat[tr_num:,:]
+
+np.savetxt(tr_output_fpath, tr_mat, delimiter=' ', fmt='%d')
+np.savetxt(te_output_fpath, tr_mat, delimiter=' ', fmt='%d')

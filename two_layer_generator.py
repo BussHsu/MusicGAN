@@ -2,13 +2,13 @@ import tensorflow as tf
 from tensorflow.python.ops import tensor_array_ops, control_flow_ops
 
 
-class Generator(object):
+class Generator2(object):
     def __init__(self, num_emb, batch_size, emb_dim, hidden_dim,
                  sequence_length, start_token,
                  learning_rate=0.01, reward_gamma=0.95):
-        self.num_emb = num_emb  #5000
+        self.num_emb = num_emb  #97
         self.batch_size = batch_size #64
-        self.emb_dim = emb_dim  #32
+        self.emb_dim = emb_dim  #64
         self.hidden_dim = hidden_dim
         self.sequence_length = sequence_length
         self.start_token = tf.constant([start_token] * self.batch_size, dtype=tf.int32)
@@ -25,6 +25,7 @@ class Generator(object):
             self.g_embeddings = tf.Variable(self.init_matrix([self.num_emb, self.emb_dim])) #randomly initialize embedding
             self.g_params.append(self.g_embeddings)
             self.g_recurrent_unit = self.create_recurrent_unit(self.g_params)  # maps h_tm1 to h_t for generator
+            self.g_recurrent_unit2 = self.create_recurrent_unit2(self.g_params)
             self.g_output_unit = self.create_output_unit(self.g_params)  # maps h_t to o_t (output token logits)
 
         # placeholder definition
@@ -38,6 +39,8 @@ class Generator(object):
         # Initial states
         self.h0 = tf.zeros([self.batch_size, self.hidden_dim])
         self.h0 = tf.stack([self.h0, self.h0])
+        self.h1 = tf.zeros([self.batch_size, self.hidden_dim])
+        self.h1 = tf.stack([self.h1, self.h1])
 
         gen_o = tensor_array_ops.TensorArray(dtype=tf.float32, size=self.sequence_length,
                                              dynamic_size=False, infer_shape=True)
@@ -45,25 +48,24 @@ class Generator(object):
                                              dynamic_size=False, infer_shape=True)
 
         def _g_recurrence(i, x_t, h_tm1, gen_o, gen_x):
-            h_t = self.g_recurrent_unit(x_t, h_tm1)  # hidden_memory_tuple
-            o_t = self.g_output_unit(h_t)  # batch x vocab , logits not prob
+            h_tm1, h_tm2 = tf.unstack(h_tm1)
+            h_t1 = self.g_recurrent_unit(x_t, h_tm1)  # hidden_memory_tuple
+            h_t1_hid, _ = tf.unstack(h_t1)
+            h_t2 = self.g_recurrent_unit2(h_t1_hid, h_tm2)
+            o_t = self.g_output_unit(h_t2)  # batch x vocab , logits not prob
             log_prob = tf.log(tf.nn.softmax(o_t))
             next_token = tf.cast(tf.reshape(tf.multinomial(log_prob, 1), [self.batch_size]), tf.int32)
             x_tp1 = tf.nn.embedding_lookup(self.g_embeddings, next_token)  # batch x emb_dim
             gen_o = gen_o.write(i, tf.reduce_sum(tf.multiply(tf.one_hot(next_token, self.num_emb, 1.0, 0.0),
                                                              tf.nn.softmax(o_t)), 1))  # [batch_size] , prob
             gen_x = gen_x.write(i, next_token)  # indices, batch_size
-            return i + 1, x_tp1, h_t, gen_o, gen_x
+            h_t1 = tf.stack([h_t1, h_t2])
+            return i + 1, x_tp1, h_t1, gen_o, gen_x
 
         _, _, _, self.gen_o, self.gen_x = control_flow_ops.while_loop(
             cond=lambda i, _1, _2, _3, _4: i < self.sequence_length,
             body=_g_recurrence,
-            loop_vars=(tf.constant(0, dtype=tf.int32),
-                       tf.nn.embedding_lookup(self.g_embeddings,
-                                              self.start_token),
-                       self.h0,
-                       gen_o,
-                       gen_x))
+            loop_vars=(tf.constant(0, dtype=tf.int32), tf.nn.embedding_lookup(self.g_embeddings, self.start_token), tf.stack([self.h0,self.h1]), gen_o, gen_x))
 
         self.gen_x = self.gen_x.stack()  # seq_length x batch_size
         self.gen_x = tf.transpose(self.gen_x, perm=[1, 0])  # batch_size x seq_length
@@ -77,19 +79,24 @@ class Generator(object):
             dtype=tf.float32, size=self.sequence_length)
         ta_emb_x = ta_emb_x.unstack(self.processed_x)
 
-        def _pretrain_recurrence(i, x_t, h_tm1, g_predictions):
-            h_t = self.g_recurrent_unit(x_t, h_tm1)
-            o_t = self.g_output_unit(h_t)
+        def _pretrain_recurrence(i, x_t, h_tm_comb, g_predictions):
+            h_tm1, h_tm2 = tf.unstack(h_tm_comb)
+            h_t1 = self.g_recurrent_unit(x_t, h_tm1)
+            h_t1_hid, _ = tf.unstack(h_t1)
+            h_t2 = self.g_recurrent_unit2(h_t1_hid, h_tm2)
+            o_t = self.g_output_unit(h_t2)
             g_predictions = g_predictions.write(i, tf.nn.softmax(o_t))  # batch x vocab_size
             x_tp1 = ta_emb_x.read(i)
-            return i + 1, x_tp1, h_t, g_predictions
+            h_t_comb = tf.stack([h_tm1, h_tm2])
+            return i + 1, x_tp1, h_t_comb, g_predictions
 
         _, _, _, self.g_predictions = control_flow_ops.while_loop(
             cond=lambda i, _1, _2, _3: i < self.sequence_length,
             body=_pretrain_recurrence,
             loop_vars=(tf.constant(0, dtype=tf.int32),
                        tf.nn.embedding_lookup(self.g_embeddings, self.start_token),
-                       self.h0, g_predictions))
+                       tf.stack([self.h0, self.h1]),
+                       g_predictions))
 
         self.g_predictions = tf.transpose(self.g_predictions.stack(), perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
 
@@ -192,7 +199,68 @@ class Generator(object):
             # Current Hidden state
             current_hidden_state = o * tf.nn.tanh(c)
 
-            return tf.stack([current_hidden_state, c], name='hidden_state')
+            return tf.stack([current_hidden_state, c])
+
+        return unit
+
+    # create the second layer
+    def create_recurrent_unit2(self, params):
+        # Weights and Bias for input and hidden tensor
+        self.Wi2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.Ui2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.bi2 = tf.Variable(self.init_matrix([self.hidden_dim]))
+
+        self.Wf2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.Uf2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.bf2 = tf.Variable(self.init_matrix([self.hidden_dim]))
+
+        self.Wog2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.Uog2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.bog2 = tf.Variable(self.init_matrix([self.hidden_dim]))
+
+        self.Wc2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.Uc2 = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
+        self.bc2 = tf.Variable(self.init_matrix([self.hidden_dim]))
+        params.extend([
+            self.Wi2, self.Ui2, self.bi2,
+            self.Wf2, self.Uf2, self.bf2,
+            self.Wog2, self.Uog2, self.bog2,
+            self.Wc2, self.Uc2, self.bc2])
+
+        def unit(x, hidden_memory_tm1):
+            previous_hidden_state, c_prev = tf.unstack(hidden_memory_tm1)
+
+            # Input Gate
+            i = tf.sigmoid(
+                tf.matmul(x, self.Wi2) +
+                tf.matmul(previous_hidden_state, self.Ui2) + self.bi2
+            )
+
+            # Forget Gate
+            f = tf.sigmoid(
+                tf.matmul(x, self.Wf2) +
+                tf.matmul(previous_hidden_state, self.Uf2) + self.bf2
+            )
+
+            # Output Gate
+            o = tf.sigmoid(
+                tf.matmul(x, self.Wog2) +
+                tf.matmul(previous_hidden_state, self.Uog2) + self.bog2
+            )
+
+            # New Memory Cell
+            c_ = tf.nn.tanh(
+                tf.matmul(x, self.Wc2) +
+                tf.matmul(previous_hidden_state, self.Uc2) + self.bc2
+            )
+
+            # Final Memory cell
+            c = f * c_prev + i * c_
+
+            # Current Hidden state
+            current_hidden_state = o * tf.nn.tanh(c)
+
+            return tf.stack([current_hidden_state, c])
 
         return unit
 
@@ -206,7 +274,7 @@ class Generator(object):
             # hidden_state : batch x hidden_dim
             logits = tf.matmul(hidden_state, self.Wo) + self.bo
             # output = tf.nn.softmax(logits)
-            logits = tf.identity(logits, name='output_logits')
+            logits = tf.identity(logits, 'output_logits')
             return logits
 
         return unit
